@@ -8,7 +8,7 @@ from fsspec import filesystem
 from fsspec.spec import AbstractBufferedFile
 
 logging.basicConfig(
-    level=logging.WARN,
+    level=logging.DEBUG,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 
@@ -100,21 +100,52 @@ class AlluxioFileSystem(AbstractFileSystem):
     def alluxio_with_fallback_handler(alluxio_impl):
         @wraps(alluxio_impl)
         def fallback_wrapper(self, *args, **kwargs):
+            # Prepare the arguments for logging
+            args_repr = [repr(a) for a in args[1:]]  # Skip 'self'
+            kwargs_repr = [f"{k}={v!r}" for k, v in kwargs.items()]
+            signature = ", ".join(args_repr + kwargs_repr)
+
+            # Log the method call
+            self.logger.debug(
+                f"Calling {alluxio_impl.__name__} with args: {signature}"
+            )
+
             if self.alluxio is None:
                 if self.fs:
                     fs_method = getattr(self.fs, alluxio_impl.__name__, None)
                     if fs_method:
+                        self.logger.debug(
+                            f"Falling back to filesystem method for {alluxio_impl.__name__}"
+                        )
                         # TODO(lu) deal with the parameter sequence mismatch issue
                         return fs_method(*args, **kwargs)
                 raise RuntimeError("Alluxio system is not initialized.")
 
             try:
-                return alluxio_impl(self, *args, **kwargs)
+                result = alluxio_impl(self, *args, **kwargs)
+                # Specifically log the result length for `cat_file`
+                if alluxio_impl.__name__ == "cat_file":
+                    result_length = len(result) if result else 0
+                    self.logger.debug(
+                        f"{alluxio_impl.__name__} with args: {signature} returned result of length {result_length}"
+                    )
+                else:
+                    # For other methods, you might want to keep a generic log or remove this else block.
+                    self.logger.debug(
+                        f"{alluxio_impl.__name__} executed successfully"
+                    )
+                return result
             except Exception as e:
                 self.error_metrics.record_error(alluxio_impl.__name__, e)
+                self.logger.error(
+                    f"Exception in {alluxio_impl.__name__}: {e}", exc_info=True
+                )
                 if self.fs:
                     fs_method = getattr(self.fs, alluxio_impl.__name__, None)
                     if fs_method:
+                        self.logger.debug(
+                            f"Falling back to filesystem method for {alluxio_impl.__name__} after exception"
+                        )
                         return fs_method(*args, **kwargs)
                 else:
                     raise
