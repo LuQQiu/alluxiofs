@@ -166,6 +166,7 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     @alluxio_with_fallback_handler
     def ls(self, path, detail=True, **kwargs):
+        print(f"ls,{path},,")
         path = self.unstrip_protocol(path)
         paths = self.alluxio.listdir(path)
         return [
@@ -175,6 +176,7 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     @alluxio_with_fallback_handler
     def info(self, path, **kwargs):
+        print(f"info,{path},,")
         path = self.unstrip_protocol(path)
         file_status = self.alluxio.get_file_status(path)
         return self._translate_alluxio_info_to_fsspec_info(file_status, True)
@@ -204,6 +206,7 @@ class AlluxioFileSystem(AbstractFileSystem):
         cache_options=None,
         **kwargs,
     ):
+        print(f"_open,{path},,")
         path = self.unstrip_protocol(path)
         return AlluxioFile(
             fs=self,
@@ -217,6 +220,9 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     @alluxio_with_fallback_handler
     def cat_file(self, path, start=None, end=None, **kwargs):
+        print(
+            f"cat_file,{path},{start if start is not None else ''},{end if end is not None else ''}"
+        )
         if end is None:
             length = -1
         else:
